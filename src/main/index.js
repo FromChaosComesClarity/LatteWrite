@@ -695,4 +695,9 @@ app.whenReady().then(() => {
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
 })
 
-app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
+// Each "window" is actually its own OS process (see launchInstance) and every
+// process only ever owns one BrowserWindow, so the usual macOS idiom of
+// staying alive with zero windows open doesn't fit: there is no in-process
+// way to summon a new one once it's gone (window:new lives in the renderer,
+// which just disappeared). Quit here on every platform.
+app.on('window-all-closed', () => app.quit())
