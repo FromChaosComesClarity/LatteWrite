@@ -1,6 +1,6 @@
 {
   "name": "lattewrite",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "A beautiful, themeable, presentation-first word processor",
   "main": "out/main/index.js",
   "author": "FromChaosComesClarity",
