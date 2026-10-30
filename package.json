@@ -12,7 +12,7 @@
     "web:dev": "vite -c web/vite.config.mjs",
     "web:build": "vite build -c web/vite.config.mjs",
     "dist": "electron-vite build && electron-builder",
-    "postdist": "if [ -f dist/LatteWrite.AppImage ]; then mkdir -p ~/LatteWrite; [ -f ~/LatteWrite/LatteWrite.AppImage ] && mv -f ~/LatteWrite/LatteWrite.AppImage ~/LatteWrite/LatteWrite_old.AppImage; cp dist/LatteWrite.AppImage ~/LatteWrite/ && echo \"Deployed LatteWrite.AppImage to ~/LatteWrite\"; fi",
+    "postdist": "if [ -f dist/LatteWrite.AppImage ]; then mkdir -p ~/Apps; [ -f ~/Apps/LatteWrite.AppImage ] && mv -f ~/Apps/LatteWrite.AppImage ~/Apps/LatteWrite_old.AppImage; cp dist/LatteWrite.AppImage ~/Apps/ && echo \"Deployed LatteWrite.AppImage to ~/Apps\"; fi",
     "dist:linux": "electron-vite build && electron-builder --linux AppImage",
     "dist:mac": "electron-vite build && electron-builder --mac dmg --arm64",
     "dist:mac:zip": "electron-vite build && electron-builder --mac zip --arm64"

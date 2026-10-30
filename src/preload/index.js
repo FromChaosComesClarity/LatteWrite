@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('api', {
   },
   auth: {
     status: () => ipcRenderer.invoke('auth:status'),
+    check: (force) => ipcRenderer.invoke('auth:check', !!force),
     start: () => ipcRenderer.invoke('auth:start'),
     signOut: () => ipcRenderer.invoke('auth:signout')
   },

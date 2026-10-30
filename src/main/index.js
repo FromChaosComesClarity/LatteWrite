@@ -5,7 +5,7 @@ import { spawn } from 'child_process'
 import fs from 'fs'
 import AdmZip from 'adm-zip'
 import store, { dataPath } from './store.js'
-import { startAuthFlow, signOut, isAuthenticated } from './auth.js'
+import { startAuthFlow, signOut, isAuthenticated, checkConnection } from './auth.js'
 import { syncBundle as gdriveSync, removeRemote as gdriveRemove, renameRemote as gdriveRename, twoWaySync as gdriveTwoWay } from './drive.js'
 import { syncBundle as onedriveSync } from './onedrive.js'
 import { readBundle } from './bundle.js'
@@ -132,8 +132,30 @@ ipcMain.handle('settings:set', (_e, patch) => {
 
 // ── Auth ──────────────────────────────────────────────────────────────────────
 ipcMain.handle('auth:status', () => isAuthenticated())
-ipcMain.handle('auth:start', async () => { await startAuthFlow(); return true })
-ipcMain.handle('auth:signout', () => { signOut(); return true })
+ipcMain.handle('auth:start', async () => {
+  await startAuthFlow()
+  await checkDrive(true)
+  maybeStartupSync()   // the launch pull a dead sign-in skipped
+  return true
+})
+ipcMain.handle('auth:signout', () => { signOut(); driveCheck = null; return true })
+
+// Launch check: whether the stored Google Drive sign-in actually still works
+// (see checkConnection). Run once per launch and shared, so the startup sync
+// and the renderer's reconnect prompt act on the same answer. `force` re-runs
+// it, for the prompt's RETRY.
+let driveCheck = null
+function checkDrive(force) {
+  if (force || !driveCheck) {
+    driveCheck = store.get('syncProvider') === 'gdrive' ? checkConnection() : Promise.resolve({ state: 'off' })
+  }
+  return driveCheck
+}
+ipcMain.handle('auth:check', async (_e, force) => {
+  const result = await checkDrive(force)
+  if (force) maybeStartupSync()
+  return result
+})
 
 // ── Documents ─────────────────────────────────────────────────────────────────
 ipcMain.handle('doc:open', async () => {
@@ -407,9 +429,13 @@ ipcMain.handle('sync:all', async (event) => {
 // Pull-on-open: reconcile once at launch so this device picks up whatever the
 // other device (e.g. the phone) changed. Only when Drive sync is active; runs
 // after the window has loaded so the renderer's listener is ready to refresh.
+// Waits on the launch check: with a dead sign-in it would only fail silently,
+// so it is left for after the user reconnects.
 let startupSynced = false
-function maybeStartupSync() {
-  if (startupSynced || !liveSyncOn() || !isAuthenticated()) return
+async function maybeStartupSync() {
+  if (startupSynced || !liveSyncOn()) return
+  if ((await checkDrive()).state !== 'ok') return
+  if (startupSynced) return   // a concurrent caller got here first
   startupSynced = true
   const go = async () => { try { await runTwoWaySync(); broadcast('sync:updated') } catch { /* offline etc. */ } }
   if (mainWindow && !mainWindow.webContents.isLoading()) go()
@@ -663,6 +689,7 @@ function buildMenu() {
 
 app.whenReady().then(() => {
   buildMenu()
+  checkDrive()         // start proving the Drive sign-in while the window loads
   createWindow()
   maybeStartupSync()   // pull anything the other device changed, once per launch
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow() })
