@@ -27,6 +27,55 @@ export function isAuthenticated() {
   return !!store.get('oauthToken')
 }
 
+// A token on disk is not a working connection: a revoked grant, or one Google
+// expired (refresh tokens last seven days while the OAuth consent screen is in
+// Testing), still reads as connected until a sync quietly fails with
+// invalid_grant. This proves the grant end to end: the access token is dropped
+// so Google has to mint a new one, then one cheap Drive call has to succeed.
+//
+// Resolves to one of:
+//   { state: 'off' }                  nothing to check (never connected)
+//   { state: 'ok', email }
+//   { state: 'reauth', error }        Google refused the sign-in; reconnecting fixes it
+//   { state: 'unreachable', error }   no answer (offline, DNS, timeout, Google 5xx)
+const CHECK_TIMEOUT_MS = 15000
+
+export async function checkConnection() {
+  const token = store.get('oauthToken')
+  if (!token) return { state: 'off' }
+  if (!token.refresh_token) return { state: 'reauth', error: 'no refresh token was saved' }
+
+  let client
+  try { client = createOAuthClient() } catch (e) { return { state: 'reauth', error: e.message } }
+  client.setCredentials({ refresh_token: token.refresh_token })
+  const drive = google.drive({ version: 'v3', auth: client })
+
+  let timer
+  const timeout = new Promise((_, reject) => {
+    timer = setTimeout(() => reject(new Error('Google did not answer in time')), CHECK_TIMEOUT_MS)
+  })
+  try {
+    const res = await Promise.race([drive.about.get({ fields: 'user(emailAddress)' }), timeout])
+    return { state: 'ok', email: res.data.user?.emailAddress || '' }
+  } catch (err) {
+    return classifyAuthError(err)
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+// Google answering 4xx (invalid_grant, invalid_client, a 401/403 from Drive) is a
+// sign-in problem that reconnecting fixes. No answer at all, or a 5xx, is not.
+function classifyAuthError(err) {
+  const status = err.response?.status
+  const data = err.response?.data
+  // The token endpoint answers { error, error_description }; Drive answers { error: { message } }.
+  const reason = typeof data?.error === 'string'
+    ? [data.error, data.error_description].filter(Boolean).join(': ')
+    : data?.error?.message || err.code || err.message
+  return { state: status >= 400 && status < 500 ? 'reauth' : 'unreachable', error: reason }
+}
+
 export async function startAuthFlow() {
   const client = createOAuthClient()
   const authUrl = client.generateAuthUrl({ access_type: 'offline', scope: SCOPES, prompt: 'consent' })

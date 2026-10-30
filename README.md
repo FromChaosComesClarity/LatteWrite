@@ -40,7 +40,7 @@ One codebase, both platforms. `npm run dist` builds for whichever OS you are on.
 
 ```bash
 npm run dist          # host platform
-npm run dist:linux    # → dist/LatteWrite.AppImage, copied to ~/LatteWrite/
+npm run dist:linux    # → dist/LatteWrite.AppImage, copied to ~/Apps/
 npm run dist:mac      # → dist/LatteWrite-arm64.dmg  (Apple Silicon)
 ```
 

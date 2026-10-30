@@ -5,6 +5,7 @@
   import { fontStack } from '../fonts.js'
   export let settings = {}
   export let connected = false
+  export let driveStatus = null   // launch check: { state: 'ok'|'reauth'|'unreachable'|'off', error }
   export let headingFamily = ''
   export let bodyFamily = ''
   export let codeFamily = ''
@@ -356,14 +357,23 @@
       <label class="field"><span>Google Client Secret</span><input type="password" bind:value={clientSecret} on:change={apply} /></label>
     </div>
     <div class="row">
-      {#if connected}
+      {#if connected && driveStatus?.state === 'reauth'}
+        <span class="warn">SIGN-IN EXPIRED</span>
+        <button class="solid" on:click={() => { apply(); onConnect() }}>RECONNECT GOOGLE DRIVE</button>
+        <button class="solid" on:click={onDisconnect}>DISCONNECT</button>
+      {:else if connected}
         <span class="ok">CONNECTED</span>
         <button class="solid" on:click={onDisconnect}>DISCONNECT</button>
       {:else}
         <button class="solid" on:click={() => { apply(); onConnect() }}>CONNECT GOOGLE DRIVE</button>
       {/if}
     </div>
-    {#if connected}
+    {#if connected && driveStatus?.state === 'reauth'}
+      <p class="note">Google refused the saved sign-in ({driveStatus.error}). Nothing syncs until you reconnect.</p>
+    {:else if connected && driveStatus?.state === 'unreachable'}
+      <p class="note">Google Drive could not be reached at launch ({driveStatus.error}).</p>
+    {/if}
+    {#if connected && driveStatus?.state !== 'reauth'}
       <div class="subhead">Sync everything now</div>
       <p class="note">Reconcile the whole folder with Drive in both directions: new and changed documents go up, your other devices' changes come down, deletes and renames propagate, and a document edited in two places is kept as both (the second saved as “… (conflict date)”). Runs automatically when the app opens; use this to force a full pass.</p>
       <div class="row">
@@ -505,6 +515,7 @@
   .creds { margin-top: 0.5rem; }
   .row { display: flex; align-items: center; gap: 0.9rem; margin-top: 0.5rem; }
   .ok { color: var(--accent); font-size: 0.8rem; letter-spacing: 0.1em; }
+  .warn { color: #e5484d; font-size: 0.8rem; letter-spacing: 0.1em; }
   .solid {
     background: var(--accent); color: var(--bg); border: none; cursor: pointer;
     font-family: var(--font-ui); font-weight: 700; letter-spacing: 0.06em; font-size: 0.8rem;

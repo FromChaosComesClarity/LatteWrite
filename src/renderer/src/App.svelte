@@ -68,6 +68,7 @@
   let showStyles = false
   let showSettings = false
   let connected = false
+  let driveStatus = null   // the launch check's { state, error }
   let maximized = false
   let drawMode = false
   let drawings = []
@@ -783,10 +784,32 @@
   // ── Settings & auth ──────────────────────────────────────────────────────────
   async function patchSettings(patch) { settings = await window.api.settings.set(patch) }
   async function connectDrive() {
-    try { await window.api.auth.start(); connected = await window.api.auth.status() }
+    try {
+      await window.api.auth.start()
+      connected = await window.api.auth.status()
+      reportDrive(await window.api.auth.check())
+    }
     catch (e) { showAlert('Cloud sync', 'Could not connect: ' + e.message) }
   }
-  async function disconnectDrive() { await window.api.auth.signOut(); connected = false }
+  async function disconnectDrive() { await window.api.auth.signOut(); connected = false; driveStatus = null }
+
+  // The launch check's answer (see checkConnection in main/auth.js). A sign-in
+  // Google refused, or a Drive it could not reach, is put in front of the user
+  // instead of left for them to find in Settings.
+  function reportDrive(r) {
+    driveStatus = r
+    if (r.state !== 'reauth' && r.state !== 'unreachable') return
+    const stakes = 'nothing syncs: your saves stay on this computer and changes from your other devices will not come down.'
+    dialog = r.state === 'reauth'
+      ? { title: 'Google Drive', danger: false,
+          message: `LatteWrite is no longer signed in to Google Drive (${r.error}). Until you reconnect, ${stakes}`,
+          confirmLabel: 'RECONNECT', cancelLabel: 'CONTINUE ANYWAY',
+          onConfirm: () => { dialog = null; connectDrive() } }
+      : { title: 'Google Drive', danger: false,
+          message: `LatteWrite could not reach Google Drive (${r.error}). Until it can, ${stakes}`,
+          confirmLabel: 'RETRY', cancelLabel: 'CONTINUE ANYWAY',
+          onConfirm: async () => { dialog = null; reportDrive(await window.api.auth.check(true)) } }
+  }
   function openSettings() { showSettings = true }
 
   function onKey(e) {
@@ -840,6 +863,7 @@
     if (settings.favHighlightColors?.length) favHl = settings.favHighlightColors
     applyCurrent()
     connected = await window.api.auth.status()
+    window.api.auth.check().then(reportDrive)   // resolves after launch; the editor stays usable meanwhile
     maximized = await window.api.window.isMaximized()
     window.api.window.onFullscreen(v => { fullscreen = v; chromeHidden = v })
     window.api.window.onMaximized(v => { maximized = v })
@@ -908,7 +932,7 @@
       onRename={renameStyle} onClose={() => showStyles = false} />
   {/if}
   {#if showSettings}
-    <Settings {settings} {connected}
+    <Settings {settings} {connected} {driveStatus}
       headingFamily={curObj.fonts.heading} bodyFamily={curObj.fonts.body} codeFamily={curObj.fonts.code}
       tokens={curObj.tokens} measure={curObj.measure} dark={curObj.dark}
       isDraft={!!draft} {editingLabel}
